@@ -5,8 +5,9 @@
 module Classifier
 
 class Bayes
+  class UnknownWord < RuntimeError; end
   # The class can be created with one or more categories, each of which will be
-  # initialized and given a training method. E.g., 
+  # initialized and given a training method. E.g.,
   #      b = Classifier::Bayes.new 'Interesting', 'Uninteresting', 'Spam'
 	def initialize(*categories)
 		@categories = Hash.new
@@ -53,34 +54,42 @@ class Bayes
 			end
 		end
 	end
-		
+
 	#
 	# Returns the scores in each category the provided +text+. E.g.,
 	#    b.classifications "I hate bad words and you"
 	#    =>  {"Uninteresting"=>-12.6997928013932, "Interesting"=>-18.4206807439524}
 	# The largest of these scores (the one closest to 0) is the one picked out by #classify
 	def classifications(text)
-		score = Hash.new
+		score        = Hash.new { |k,v| k[v] = 0 }
+    unknown_word = true
+
 		@categories.each do |category, category_words|
-			score[category.to_s] = 0
-			total = category_words.values.inject(0) {|sum, element| sum+element}
-			text.word_hash.each do |word, count|
-				s = category_words.has_key?(word) ? category_words[word] : 0.1
-				score[category.to_s] += Math.log(s/total.to_f)
-			end
+			total = category_words.values.sum
+
+      if text.word_hash.keys.any? { |word| category_words.has_key?(word) }
+        unknown_word = false
+        text.word_hash.each_key do |word|
+          s = category_words.has_key?(word) ? category_words[word] : 0.1
+          score[category.to_s] += Math.log(s/total.to_f)
+        end
+      else
+        score[category.to_s] += -1000
+      end
 		end
-		return score
+    raise UnknownWord, text if unknown_word
+		score
 	end
 
   #
-  # Returns the classification of the provided +text+, which is one of the 
+  # Returns the classification of the provided +text+, which is one of the
   # categories given in the initializer. E.g.,
   #    b.classify "I hate bad words and you"
   #    =>  'Uninteresting'
 	def classify(text)
 		(classifications(text).sort_by { |a| -a[1] })[0][0]
 	end
-	
+
 	#
 	# Provides training and untraining methods for the categories specified in Bayes#new
 	# For example:
@@ -99,7 +108,7 @@ class Bayes
 	    super  #raise StandardError, "No such method: #{name}"
 		end
 	end
-	
+
 	#
 	# Provides a list of category names
 	# For example:
@@ -108,7 +117,7 @@ class Bayes
 	def categories # :nodoc:
 		@categories.keys.collect {|c| c.to_s}
 	end
-	
+
 	#
 	# Allows you to add categories to the classifier.
 	# For example:
@@ -121,7 +130,7 @@ class Bayes
 	def add_category(category)
 		@categories[category.prepare_category_name] = Hash.new
 	end
-	
+
 	alias append_category add_category
 end
 
